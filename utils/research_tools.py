@@ -1,25 +1,21 @@
-# ================================
-# Standard library imports
-# ================================
+# --- Standard library ---
 import os
 import xml.etree.ElementTree as ET
 
-# ================================
-# Third-party imports
-# ================================
+# --- Third-party ---
 import requests
-from tavily import TavilyClient
 from dotenv import load_dotenv
+from tavily import TavilyClient
+import wikipedia
 
-# ================================
+# Init env
+load_dotenv()  # load variables 
 
-load_dotenv()
-
+# Set user-agent for requests to arXiv
 session = requests.Session()
 session.headers.update({
     "User-Agent": "LF-ADP-Agent/1.0 (mailto:your.email@example.com)"
 })
-
 
 def arxiv_search_tool(query: str, max_results: int = 5) -> list[dict]:
     """
@@ -28,7 +24,7 @@ def arxiv_search_tool(query: str, max_results: int = 5) -> list[dict]:
     url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start=0&max_results={max_results}"
 
     try:
-        response = session.get(url, timeout=30)
+        response = session.get(url, timeout=60)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         return [{"error": str(e)}]
@@ -63,7 +59,7 @@ def arxiv_search_tool(query: str, max_results: int = 5) -> list[dict]:
         return results
     except Exception as e:
         return [{"error": f"Parsing failed: {str(e)}"}]
-    
+
 
 arxiv_tool_def = {
     "type": "function",
@@ -90,7 +86,6 @@ arxiv_tool_def = {
 
 
 
-
 def tavily_search_tool(query: str, max_results: int = 5, include_images: bool = False) -> list[dict]:
     """
     Perform a search using the Tavily API.
@@ -110,6 +105,7 @@ def tavily_search_tool(query: str, max_results: int = 5, include_images: bool = 
     params['api_key'] = api_key
 
     client = TavilyClient(api_key)
+
 
     try:
         response = client.search(
@@ -134,7 +130,7 @@ def tavily_search_tool(query: str, max_results: int = 5, include_images: bool = 
 
     except Exception as e:
         return [{"error": str(e)}]  # For LLM-friendly agents
-
+    
 
 tavily_tool_def = {
     "type": "function",
@@ -162,4 +158,63 @@ tavily_tool_def = {
             "required": ["query"]
         }
     }
+}
+
+## Wikipedia search tool
+
+def wikipedia_search_tool(query: str, sentences: int = 5) -> list[dict]:
+    """
+    Searches Wikipedia for a summary of the given query.
+
+    Args:
+        query (str): Search query for Wikipedia.
+        sentences (int): Number of sentences to include in the summary.
+
+    Returns:
+        list[dict]: A list with a single dictionary containing title, summary, and URL.
+    """
+    try:
+        page_title = wikipedia.search(query)[0]
+        page = wikipedia.page(page_title)
+        summary = wikipedia.summary(page_title, sentences=sentences)
+
+        return [{
+            "title": page.title,
+            "summary": summary,
+            "url": page.url
+        }]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+# Tool definition
+wikipedia_tool_def = {
+    "type": "function",
+    "function": {
+        "name": "wikipedia_search_tool",
+        "description": "Searches for a Wikipedia article summary by query string.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keywords for the Wikipedia article."
+                },
+                "sentences": {
+                    "type": "integer",
+                    "description": "Number of sentences in the summary.",
+                    "default": 5
+                }
+            },
+            "required": ["query"]
+        }
+    }
+}
+
+
+
+# Tool mapping
+tool_mapping = {
+    "tavily_search_tool": tavily_search_tool,
+    "arxiv_search_tool": arxiv_search_tool,
+    "wikipedia_search_tool": wikipedia_search_tool
 }
